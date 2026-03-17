@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.ensemble import RandomForestClassifier
 
 from data_generator import generate_demo_data, load_and_validate_csv, FEATURE_COLS
 from model import TLearnerUplift, classify_segments, calculate_roi
@@ -34,6 +36,15 @@ SEGMENT_DESC = {
         "Lost Causes":   "何をしても買わない",
         "Sleeping Dogs": "クーポンを送ると鬱陶しがって離脱",
     },
+}
+SEG_ORDER = ["Sure Things", "Persuadables", "Lost Causes", "Sleeping Dogs"]
+
+FEAT_LABELS = {
+    "age":             "年齢 / Age",
+    "past_spend":      "過去購買額 / Past Spend",
+    "visit_freq":      "来店頻度 / Visit Freq",
+    "days_since_last": "最終来店からの日数 / Recency",
+    "avg_basket":      "平均購買額 / Avg Basket",
 }
 
 LANG = {
@@ -75,6 +86,14 @@ LANG = {
         "download":      "📥 予測スコアをダウンロード",
         "csv_label":     "customer_scores.csv",
         "no_data":       "データを選択して「モデルを実行」を押してください",
+        "seg_profile":   "🔍 セグメント別キャラクター分析",
+        "avg_label":     "平均値",
+        "feat_profile":  "各セグメントの顧客特徴",
+        "feat_profile_cap": "※ 数値は各特徴量を0〜1に正規化した相対値です。1.0に近いほどそのセグメントでその特徴が強く現れています。",
+        "feat_dist_title": "📊 特徴量分布比較",
+        "feat_imp_title":  "🔑 各セグメントを判別する特徴量の重要度",
+        "feat_imp_cap":    "※ One-vs-Restのランダムフォレストによる重要度。値が大きいほどそのセグメントを他と区別するのにその特徴量が強く効いています。",
+        "persona_title": "👤 セグメントペルソナ",
     },
     "en": {
         "title":         "🎯 Promo ROI Predictor",
@@ -114,6 +133,14 @@ LANG = {
         "download":      "📥 Download Prediction Scores",
         "csv_label":     "customer_scores.csv",
         "no_data":       "Select data and click 'Run Model'",
+        "seg_profile":   "🔍 Segment Character Analysis",
+        "avg_label":     "Average",
+        "feat_profile":  "Customer Profile by Segment",
+        "feat_profile_cap": "Values are normalized (0–1) per feature. 1.0 means that segment scores highest on that feature across all segments.",
+        "feat_dist_title": "📊 Feature Distribution by Segment",
+        "feat_imp_title":  "🔑 Feature Importance for Segment Classification",
+        "feat_imp_cap":    "One-vs-Rest Random Forest importance. Higher = that feature more strongly distinguishes the segment from others.",
+        "persona_title": "👤 Segment Personas",
     },
 }
 
@@ -134,8 +161,8 @@ with st.sidebar:
     st.header(T["data_source"])
     data_mode = st.radio("", [T["use_demo"], T["upload_csv"]], label_visibility="collapsed")
 
-    df_input     = None
-    feat_cols    = FEATURE_COLS
+    df_input  = None
+    feat_cols = FEATURE_COLS
 
     if data_mode == T["use_demo"]:
         n_samples = st.slider(T["n_samples"], 1000, 20000, 10000, step=1000)
@@ -160,7 +187,7 @@ with st.sidebar:
 
     st.divider()
     st.header(T["roi_params"])
-    coupon_cost = st.number_input(T["coupon_cost"], min_value=0.1, value=5.0, step=0.5)
+    coupon_cost = st.number_input(T["coupon_cost"], min_value=0.1, value=5.0,  step=0.5)
     aov         = st.number_input(T["aov"],         min_value=1.0, value=60.0, step=5.0)
     margin      = st.slider(T["margin"], 5, 80, 30) / 100
 
@@ -170,11 +197,11 @@ with st.sidebar:
 # ── モデル実行 ────────────────────────────────────────────────────
 if run and df_input is not None:
     with st.spinner(T["running"]):
-        model = TLearnerUplift()
+        model  = TLearnerUplift()
         model.fit(df_input, feat_cols)
-        scores  = model.predict(df_input)
-        scored  = classify_segments(scores, uplift_thresh, buy_thresh)
-        roi     = calculate_roi(scored, coupon_cost, aov, margin)
+        scores = model.predict(df_input)
+        scored = classify_segments(scores, uplift_thresh, buy_thresh)
+        roi    = calculate_roi(scored, coupon_cost, aov, margin)
         st.session_state.result = {
             "scored": scored, "roi": roi, "df_input": df_input,
             "uplift_thresh": uplift_thresh, "buy_thresh": buy_thresh,
@@ -191,10 +218,10 @@ roi           = result["roi"]
 uplift_thresh = result["uplift_thresh"]
 buy_thresh    = result["buy_thresh"]
 
+seg_name = lambda s: f"{SEGMENT_LABELS_JA[s]}（{s}）" if lang == "ja" else s
+
 # ── 4象限バブルチャート ──────────────────────────────────────────
 st.header(T["seg_result"])
-
-seg_name = lambda s: f"{SEGMENT_LABELS_JA[s]}（{s}）" if lang == "ja" else s
 
 fig = go.Figure()
 for seg, color in SEGMENT_COLORS.items():
@@ -217,8 +244,8 @@ for seg, color in SEGMENT_COLORS.items():
 
 fig.add_vline(x=uplift_thresh, line_dash="dash", line_color="gray",
               annotation_text=f"uplift={uplift_thresh}", annotation_position="top left")
-fig.add_hline(y=buy_thresh,    line_dash="dash", line_color="gray",
-              annotation_text=f"p={buy_thresh}",     annotation_position="bottom right")
+fig.add_hline(y=buy_thresh, line_dash="dash", line_color="gray",
+              annotation_text=f"p={buy_thresh}", annotation_position="bottom right")
 
 desc = SEGMENT_DESC[lang]
 for seg, (ax, ay) in {
@@ -254,18 +281,18 @@ def _metric_color(val: float) -> str:
 with col1:
     st.subheader(T["all_customers"])
     m1, m2, m3 = st.columns(3)
-    m1.metric(T["coupon_spend"],  f"${roi['baseline_coupon_cost']:,.0f}")
-    m2.metric(T["uplift_rev"],    f"${roi['baseline_uplift_revenue']:,.0f}")
-    m3.metric(T["net"],           f"${roi['baseline_net']:,.0f}",
+    m1.metric(T["coupon_spend"], f"${roi['baseline_coupon_cost']:,.0f}")
+    m2.metric(T["uplift_rev"],   f"${roi['baseline_uplift_revenue']:,.0f}")
+    m3.metric(T["net"],          f"${roi['baseline_net']:,.0f}",
               delta_color=_metric_color(roi["baseline_net"]))
 
 with col2:
     st.subheader(T["targeted"])
     m4, m5, m6 = st.columns(3)
-    m4.metric(T["coupon_spend"],  f"${roi['targeted_coupon_cost']:,.0f}",
+    m4.metric(T["coupon_spend"], f"${roi['targeted_coupon_cost']:,.0f}",
               delta=f"-${roi['coupon_saving']:,.0f}", delta_color="inverse")
-    m5.metric(T["uplift_rev"],    f"${roi['targeted_uplift_revenue']:,.0f}")
-    m6.metric(T["net"],           f"${roi['targeted_net']:,.0f}",
+    m5.metric(T["uplift_rev"],   f"${roi['targeted_uplift_revenue']:,.0f}")
+    m6.metric(T["net"],          f"${roi['targeted_net']:,.0f}",
               delta_color=_metric_color(roi["targeted_net"]))
 
 st.success(
@@ -274,25 +301,152 @@ st.success(
     f"{'のクーポン費用を節約できます。' if lang == 'ja' else 'in coupon budget can be saved.'}"
 )
 
-# ROI比較棒グラフ
 fig2 = go.Figure()
 cats     = [T["all_customers"], T["targeted"]]
 costs    = [roi["baseline_coupon_cost"],    roi["targeted_coupon_cost"]]
 revenues = [roi["baseline_uplift_revenue"], roi["targeted_uplift_revenue"]]
 nets     = [roi["baseline_net"],            roi["targeted_net"]]
-
-fig2.add_bar(name=T["coupon_spend"],  x=cats, y=costs,    marker_color="#c0392b", opacity=0.8)
-fig2.add_bar(name=T["uplift_rev"],    x=cats, y=revenues, marker_color="#2d6a4f", opacity=0.8)
-fig2.add_bar(name=T["net"],           x=cats, y=nets,     marker_color="#1a4a7a", opacity=0.8)
+fig2.add_bar(name=T["coupon_spend"], x=cats, y=costs,    marker_color="#c0392b", opacity=0.8)
+fig2.add_bar(name=T["uplift_rev"],   x=cats, y=revenues, marker_color="#2d6a4f", opacity=0.8)
+fig2.add_bar(name=T["net"],          x=cats, y=nets,     marker_color="#1a4a7a", opacity=0.8)
 fig2.update_layout(barmode="group", height=380, title=T["roi_title"])
 st.plotly_chart(fig2, use_container_width=True)
+
+# ── セグメント別キャラクター分析 ─────────────────────────────────
+st.header(T["seg_profile"])
+
+df_with_seg = result["df_input"].copy().merge(
+    scored[["customer_id", "segment", "uplift_score", "p_treatment", "p_control"]],
+    on="customer_id", how="left"
+)
+df_raw = result["df_input"].copy().merge(
+    scored[["customer_id", "segment"]], on="customer_id", how="left"
+)
+
+feat_cols_used = [c for c in FEATURE_COLS if c in df_with_seg.columns]
+feat_display   = [FEAT_LABELS.get(f, f) for f in feat_cols_used]
+
+if feat_cols_used:
+
+    # ── 特徴量分布比較（実数値・特徴量ごと） ────────────────────
+    st.subheader(T["feat_profile"])
+
+    raw_means = df_raw.groupby("segment")[feat_cols_used].mean().reset_index()
+    with st.container():
+        bar_cols = st.columns(len(feat_cols_used))
+        for ci, feat in enumerate(feat_cols_used):
+            with bar_cols[ci]:
+                fig_bar = go.Figure()
+                for seg in SEG_ORDER:
+                    row_data = raw_means[raw_means["segment"] == seg]
+                    if row_data.empty:
+                        continue
+                    fig_bar.add_bar(
+                        x=[seg_name(seg)],
+                        y=[row_data[feat].values[0]],
+                        name=seg_name(seg),
+                        marker_color=SEGMENT_COLORS[seg],
+                        showlegend=False,
+                    )
+                fig_bar.update_layout(
+                    title=FEAT_LABELS.get(feat, feat),
+                    height=280,
+                    margin=dict(t=40, b=20, l=10, r=10),
+                    yaxis_title=T["avg_label"],
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+    # ── 特徴量重要度ヒートマップ ─────────────────────────────────
+    st.subheader(T["feat_imp_title"])
+
+    imp_rows = []
+    for seg in SEG_ORDER:
+        if seg not in df_raw["segment"].values:
+            continue
+        clf_ovr = RandomForestClassifier(n_estimators=100, random_state=42)
+        clf_ovr.fit(
+            df_raw[feat_cols_used],
+            (df_raw["segment"] == seg).astype(int),
+        )
+        row = {"segment": seg_name(seg)}
+        for f, v in zip(feat_cols_used, clf_ovr.feature_importances_):
+            row[FEAT_LABELS.get(f, f)] = round(v, 3)
+        imp_rows.append(row)
+
+    imp_df    = pd.DataFrame(imp_rows).set_index("segment")
+    z_imp     = imp_df.values
+    x_imp     = list(imp_df.columns)
+    y_imp     = list(imp_df.index)
+
+    fig_imp_heat = go.Figure(go.Heatmap(
+        z=z_imp,
+        x=x_imp,
+        y=y_imp,
+        colorscale="RdYlGn_r",
+        zmin=0, zmax=z_imp.max(),
+        text=[[f"{v:.3f}" for v in row] for row in z_imp],
+        texttemplate="%{text}",
+        textfont=dict(size=12, color="black"),
+        colorbar=dict(title="Importance", thickness=14),
+    ))
+    fig_imp_heat.update_layout(
+        height=300,
+        margin=dict(t=20, b=20, l=20, r=20),
+        xaxis=dict(side="bottom"),
+    )
+    st.plotly_chart(fig_imp_heat, use_container_width=True)
+    st.caption(T["feat_imp_cap"])
+
+    # ── セグメントペルソナカード ──────────────────────────────────
+    st.subheader(T["persona_title"])
+
+    personas = {
+        "Sure Things": {
+            "en": {"icon": "💎", "tagline": "Your loyal regulars",             "traits": ["High visit frequency", "High past spend", "Short days since last visit", "Large average basket"]},
+            "ja": {"icon": "💎", "tagline": "あなたの常連客",                  "traits": ["来店頻度：高", "過去購買額：高", "最終来店日：直近", "平均購買額：大"]},
+        },
+        "Persuadables": {
+            "en": {"icon": "🎯", "tagline": "Price-sensitive occasional shoppers", "traits": ["Moderate visit frequency", "Medium past spend", "Longer days since last visit", "Responds to price incentives"]},
+            "ja": {"icon": "🎯", "tagline": "価格に敏感な不定期客",            "traits": ["来店頻度：中程度", "過去購買額：中程度", "最終来店日：やや遠い", "価格インセンティブに反応"]},
+        },
+        "Lost Causes": {
+            "en": {"icon": "🚪", "tagline": "Window shoppers, not buyers",     "traits": ["Low visit frequency", "Low past spend", "Very long since last visit", "Not price-motivated"]},
+            "ja": {"icon": "🚪", "tagline": "見るだけ客",                      "traits": ["来店頻度：低", "過去購買額：低", "最終来店日：遠い", "価格で動かない"]},
+        },
+        "Sleeping Dogs": {
+            "en": {"icon": "⚠️", "tagline": "VIPs who hate being sold to",    "traits": ["Very high visit frequency", "Very high past spend", "Recent visits", "Resent promotional noise"]},
+            "ja": {"icon": "⚠️", "tagline": "売り込みを嫌うVIP客",            "traits": ["来店頻度：非常に高", "過去購買額：非常に高", "最終来店日：直近", "販促メッセージを鬱陶しがる"]},
+        },
+    }
+
+    persona_cols = st.columns(4)
+    for col, seg in zip(persona_cols, SEG_ORDER):
+        with col:
+            p         = personas[seg][lang]
+            seg_count = len(scored[scored["segment"] == seg])
+            pct       = seg_count / len(scored) * 100
+            st.markdown(
+                f"""
+                <div style="background:{SEGMENT_COLORS[seg]};border-radius:10px;padding:16px;height:100%;">
+                <div style="font-size:1.6rem;margin-bottom:6px;">{p['icon']}</div>
+                <div style="font-family:serif;font-size:.95rem;color:#ffffff;
+                font-weight:600;margin-bottom:4px;">{seg_name(seg)}</div>
+                <div style="font-size:.75rem;color:#ffffffcc;margin-bottom:10px;font-style:italic;">
+                {p['tagline']}</div>
+                <div style="font-size:.82rem;font-weight:700;color:#ffffff;
+                margin-bottom:8px;">{seg_count:,} {'人' if lang == 'ja' else 'customers'} ({pct:.1f}%)</div>
+                {''.join(f'<div style="font-size:.75rem;color:#ffffffdd;margin-bottom:3px;">• {t}</div>' for t in p['traits'])}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 # ── セグメント別集計テーブル ─────────────────────────────────────
 st.header(T["seg_table"])
 
-rows = []
+rows  = []
 total = len(scored)
-for seg in ["Sure Things", "Persuadables", "Lost Causes", "Sleeping Dogs"]:
+for seg in SEG_ORDER:
     sub = scored[scored["segment"] == seg]
     rows.append({
         T["seg_col"]:     seg_name(seg),
@@ -309,7 +463,7 @@ def _highlight_seg(row):
     seg = row[T["seg_col"]]
     for k, v in {seg_name(s): SEGMENT_COLORS[s] for s in SEGMENT_COLORS}.items():
         if k == seg:
-            return [f"color:{v};font-weight:500"] * len(row)
+            return [f"color:{v};font-weight:600;font-size:1rem"] * len(row)
     return [""] * len(row)
 
 st.dataframe(
@@ -318,7 +472,6 @@ st.dataframe(
     hide_index=True,
 )
 
-# ── セグメント分布パイチャート ────────────────────────────────────
 fig3 = px.pie(
     seg_df,
     names=T["seg_col"],
