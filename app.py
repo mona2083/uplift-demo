@@ -11,6 +11,8 @@ from model import TLearnerUplift, classify_segments, calculate_roi
 
 st.set_page_config(page_title="Promo ROI Predictor", layout="wide")
 
+PORTFOLIO_URL = "https://mona2083.github.io/portfolio-2026/index.html"
+
 SEGMENT_COLORS = {
     "Sure Things":   "#2d6a4f",
     "Persuadables":  "#1a4a7a",
@@ -51,6 +53,8 @@ LANG = {
     "ja": {
         "title":         "🎯 Promo ROI Predictor",
         "caption":       "Uplift Modeling で販促予算を最適化する",
+        "portfolio_btn": "🔗 ポートフォリオを見る",
+        "portfolio_label":"ポートフォリオ",
         "data_source":   "データソース",
         "use_demo":      "デモデータを使う",
         "upload_csv":    "実データCSVをアップロード",
@@ -94,10 +98,18 @@ LANG = {
         "feat_imp_title":  "🔑 各セグメントを判別する特徴量の重要度",
         "feat_imp_cap":    "※ One-vs-Restのランダムフォレストによる重要度。値が大きいほどそのセグメントを他と区別するのにその特徴量が強く効いています。",
         "persona_title": "👤 セグメントペルソナ",
+        "csv_desc":  "必要なカラム：",
+        "csv_col1":  "• customer_id：顧客ID（整数）",
+        "csv_col2":  "• treatment：クーポン配布（1=あり / 0=なし）",
+        "csv_col3":  "• conversion：購入（1=あり / 0=なし）",
+        "csv_col4":  "• 特徴量：年齢・購買額等（数値）",
+        "csv_example": "例）customer_id,treatment,conversion,age,past_spend\n1,1,1,35,250\n2,0,0,52,80",
     },
     "en": {
         "title":         "🎯 Promo ROI Predictor",
         "caption":       "Optimize your promotional budget with Uplift Modeling",
+        "portfolio_btn": "🔗 View Portfolio",
+        "portfolio_label":"Portfolio",
         "data_source":   "Data Source",
         "use_demo":      "Use demo data",
         "upload_csv":    "Upload real data CSV",
@@ -141,6 +153,12 @@ LANG = {
         "feat_imp_title":  "🔑 Feature Importance for Segment Classification",
         "feat_imp_cap":    "One-vs-Rest Random Forest importance. Higher = that feature more strongly distinguishes the segment from others.",
         "persona_title": "👤 Segment Personas",
+        "csv_desc":  "Required columns:",
+        "csv_col1":  "• customer_id: customer ID (integer)",
+        "csv_col2":  "• treatment: coupon sent (1=yes / 0=no)",
+        "csv_col3":  "• conversion: purchased (1=yes / 0=no)",
+        "csv_col4":  "• features: age, spend, etc. (numeric)",
+        "csv_example": "e.g. customer_id,treatment,conversion,age,past_spend\n1,1,1,35,250\n2,0,0,52,80",
     },
 }
 
@@ -150,11 +168,19 @@ with st.sidebar:
 
 T = LANG[lang]
 
+with st.sidebar:
+    st.link_button(T["portfolio_btn"], PORTFOLIO_URL, use_container_width=True)
+    st.divider()
+
 if "result" not in st.session_state:
     st.session_state.result = None
 
-st.title(T["title"])
-st.caption(T["caption"])
+head_l, head_r = st.columns([0.78, 0.22], vertical_alignment="center")
+with head_l:
+    st.title(T["title"])
+    st.caption(T["caption"])
+with head_r:
+    st.link_button(T["portfolio_label"], PORTFOLIO_URL, use_container_width=True)
 
 # ── サイドバー設定 ────────────────────────────────────────────────
 with st.sidebar:
@@ -171,6 +197,13 @@ with st.sidebar:
         feat_cols = FEATURE_COLS
     else:
         uploaded = st.file_uploader(T["upload_label"], type=["csv"])
+        st.caption(T["csv_desc"])
+        st.caption(T["csv_col1"])
+        st.caption(T["csv_col2"])
+        st.caption(T["csv_col3"])
+        st.caption(T["csv_col4"])
+        with st.expander("📋 " + ("フォーマット例" if lang == "ja" else "Format example")):
+            st.code(T["csv_example"], language="csv")
         if uploaded:
             df_input, err = load_and_validate_csv(uploaded)
             if err:
