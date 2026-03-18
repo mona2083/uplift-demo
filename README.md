@@ -179,8 +179,3 @@ To deploy your own instance:
 🌺 Honolulu, Hawaii  
 🔗 [Portfolio](https://mona2083.github.io/portfolio-2026/index.html) | [GitHub](https://github.com/mona2083) | [LinkedIn](https://www.linkedin.com/in/manami-oyama/)
 
----
-
-## License
-
-MIT License — free to use
