@@ -2,7 +2,7 @@
 
 > Stop sending coupons to everyone. Use AI to find the exact customers where a promotion will actually change their behavior.
 
-A Streamlit app that uses Uplift Modeling (T-Learner) to classify customers into four segments and calculate the ROI difference between blanket coupon distribution vs. precision targeting.
+A Streamlit app that uses Uplift Modeling (T-Learner) to classify customers into four segments and calculate the ROI difference between blanket coupon distribution vs. precision targeting. 
 
 ---
 
@@ -36,32 +36,24 @@ This app identifies exactly who is a Persuadable and shows the financial impact 
 
 ---
 
-## Features
+## Features & Technical Highlights
 
-### 📊 4-Quadrant Segment Chart
-- Scatter plot of uplift score × base purchase probability
-- Each customer plotted as a colored dot in their segment
-- Adjustable threshold sliders to tune the classification in real time
+### 🧠 Robust Causal Inference
+- **T-Learner (Meta-Learner)**: Uses dual Gradient Boosting Classifiers optimized with subsampling and depth constraints to prevent overfitting on imbalanced treatment/control splits.
+- **Score Stabilization**: Outputs are mathematically clipped to valid probability boundaries to ensure reliable ROI calculations.
 
-### 💰 ROI Comparison
-- Side-by-side metrics: send to all customers vs. Persuadables only
-- Coupon cost, incremental revenue (gross profit), and net profit
-- Grouped bar chart showing the financial difference
+### 🔍 Explainable AI (XAI)
+- **Feature Importance Heatmap**: Uses One-vs-Rest Random Forest classifiers to interpret *why* a customer belongs to a certain segment.
+- **Persona Generation**: Translates raw data into distinct customer personas with key behavioral traits.
 
-### 🔍 Segment Character Analysis
-- Feature importance heatmap (One-vs-Rest Random Forest) — which features distinguish each segment
-- Feature distribution bar charts — actual average values per segment
-- Persona cards for each segment with customer count and key traits
+### 💰 ROI Simulation
+- Side-by-side metrics: send to all customers vs. Persuadables only.
+- Compares coupon cost, incremental revenue (gross profit), and net profit dynamically.
 
-### 📋 Segment Summary Table + Pie Chart
-- Average uplift score, purchase probability (with/without coupon) per segment
-- Distribution breakdown
-
-### 📥 CSV Download
-- Export all customers with their segment label and prediction scores
-
-### 🌐 Bilingual
-- Full English / 日本語 toggle
+### 📊 Modular UI Architecture
+- Clean separation of concerns: Orchestration (`app.py`), ML Logic (`model.py`), and complex Plotly rendering (`visuals.py`).
+- Interactive 4-quadrant scatter plot with adjustable thresholds.
+- Full English / 日本語 toggle.
 
 ---
 
@@ -86,7 +78,7 @@ The **T-Learner** trains two separate Gradient Boosting models:
 
 For each customer, both models predict purchase probability. The **uplift score** is the difference:
 
-```
+```text
 Uplift = P(buy | coupon) - P(buy | no coupon)
 ```
 
@@ -96,11 +88,14 @@ A score of +0.25 means the coupon increases purchase probability by 25 percentag
 
 ## Project Structure
 
-```
+```text
 promo-roi-predictor/
-├── app.py              # Streamlit UI — charts, ROI, segment analysis
-├── model.py            # T-Learner, segment classification, ROI calculation
-├── data_generator.py   # Synthetic customer data with designed segment separation
+├── app.py              # Streamlit UI & state orchestration
+├── model.py            # T-Learner logic, score clipping, ROI calculation
+├── visuals.py          # Separated Plotly charting and XAI rendering logic
+├── constants.py        # Styling, bilingual labels, and persona definitions
+├── lang.py             # i18n dictionary (EN/JA)
+├── data_generator.py   # Synthetic customer data generator
 ├── requirements.txt
 └── .gitignore
 ```
@@ -151,15 +146,6 @@ customer_id,treatment,conversion,age,past_spend,visit_freq,days_since_last,avg_b
 | `conversion` | 0 or 1 | Whether customer purchased (1=yes, 0=no) |
 | feature columns | numeric | Age, spend, frequency, etc. (any number of columns) |
 
-### Threshold Tuning
-- **Uplift threshold** — customers above this line are considered "positively affected" by coupons
-- **Purchase probability threshold** — separates high-probability buyers from low-probability buyers
-- Adjust both sliders to match your business context
-
-### ROI Parameters
-- Set coupon cost per customer, average order value, and gross margin
-- The ROI comparison updates automatically
-
 ---
 
 ## Deployment
@@ -178,4 +164,3 @@ To deploy your own instance:
 **Manami Oyama** — AI Engineer / Product Manager  
 🌺 Honolulu, Hawaii  
 🔗 [Portfolio](https://mona2083.github.io/portfolio-2026/index.html) | [GitHub](https://github.com/mona2083) | [LinkedIn](https://www.linkedin.com/in/manami-oyama/)
-
